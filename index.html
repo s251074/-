@@ -1,0 +1,1782 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>音符記憶挑戰｜雙榜與曲目分類版</title>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Fraunces:wght@600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    :root { --navy:#111c2c; --gold:#f1c878; --cream:#fff4df; }
+    * { box-sizing:border-box; }
+    body { font-family:"Work Sans",sans-serif; color:var(--cream); margin:0; background:#101a2a; }
+    .app-shell { width:100%; min-height:100vh; background:radial-gradient(circle at 50% 18%,#314466 0%,#17253b 42%,#101a2a 100%); overflow-x:hidden; }
+    .app-shell::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.14; background-image:radial-gradient(#f1c878 1px,transparent 1px); background-size:34px 34px; mask-image:linear-gradient(to bottom,black,transparent 85%); }
+    .play-panel { background:#1c2a40; box-shadow:0 24px 75px #060e1e88, inset 0 1px #ffffff18; }
+    .display-font { font-family:Fraunces,serif; }
+    .note-button { width:100%; aspect-ratio:1; border:2px solid #ffffff28; border-radius:25%; background:#344961; color:#fff4df; box-shadow:0 8px 0 #101c2d,0 14px 24px #0a152a65; transition:transform .12s,box-shadow .12s,background .12s,border-color .12s; touch-action:manipulation; }
+    .note-button:hover:not(:disabled) { transform:translateY(-3px); border-color:#f1c878; }
+    .note-button:active:not(:disabled), .note-button.is-lit { transform:translateY(5px) scale(1.04); background:#f1c878; color:#152238; border-color:#fff1c9; box-shadow:0 2px 0 #926a35,0 0 34px #f1c878b3; }
+    .note-button.is-correct { transform:translateY(4px) scale(1.04); background:#34d399; color:#06281e; border-color:#a7f3d0; box-shadow:0 2px 0 #059669,0 0 30px #34d399aa; }
+    .note-button.is-wrong { background:#f87171; color:#2b0909; border-color:#fecaca; box-shadow:0 2px 0 #b91c1c,0 0 30px #f87171aa; animation:shake .32s ease-in-out; }
+    .note-button:disabled { cursor:not-allowed; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid #fff1c9; outline-offset:3px; }
+    .fine-line { height:1px; background:linear-gradient(90deg,transparent,#f1c87877,transparent); }
+    .start-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; }
+    .ornament { animation:float 4s ease-in-out infinite; }
+    .combo-pop { animation:pop .28s cubic-bezier(.2,1.4,.4,1); }
+    input[type="range"] { accent-color:#f1c878; }
+    @keyframes float { 50% { transform:translateY(-7px) rotate(6deg); } }
+    @keyframes shake { 0%,100% { transform:translateX(0); } 25% { transform:translateX(-6px); } 75% { transform:translateX(6px); } }
+    @keyframes pop { 0% { transform:scale(.85); } 60% { transform:scale(1.12); } 100% { transform:scale(1); } }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+  </style>
+</head>
+<body class="w-full">
+  <div class="app-shell relative w-full px-4 py-8 sm:py-10">
+    <!-- 首頁選歌、分類篩選、試聽與雙模式排行榜 -->
+    <section id="start-screen" class="start-screen relative mx-auto w-full max-w-4xl" aria-labelledby="welcome-title">
+      <div class="play-panel w-full max-w-2xl rounded-[2rem] border border-white/10 p-6 text-center sm:p-9">
+        <div aria-hidden="true" class="ornament mb-2 text-5xl text-amber-300">✦</div>
+        <h1 id="welcome-title" class="display-font text-3xl sm:text-4xl font-bold leading-tight">音符記憶挑戰</h1>
+        <p class="mx-auto mt-2.5 max-w-md text-sm sm:text-base leading-relaxed text-amber-100/80">
+          按分類挑選香港流行曲或古典名曲，先試聽示範或原曲，再衝擊雙榜前三名！
+        </p>
+
+        <!-- 曲目分類標籤列 -->
+        <div id="start-category-tabs" class="mt-5 flex flex-wrap items-center justify-center gap-2" role="tablist" aria-label="歌曲分類篩選"></div>
+
+        <!-- 動態歌曲選擇清單 -->
+        <div id="start-song-list" class="mt-4 grid max-h-[320px] gap-2.5 overflow-y-auto pr-1 text-left" role="group" aria-label="選擇歌曲"></div>
+
+        <p id="start-preview-status" class="mt-3 min-h-[1.25rem] text-sm font-medium text-amber-200" aria-live="polite"></p>
+
+        <div class="mt-3.5 flex flex-wrap items-center justify-center gap-2.5">
+          <button id="preview-all-start" type="button" class="rounded-full border border-amber-200/40 bg-white/5 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-white/15">▶ 連播本類曲目</button>
+          <button id="launch-endless-button" type="button" class="rounded-full border border-emerald-300/45 bg-emerald-400/15 px-5 py-2.5 text-sm font-bold text-emerald-200 transition hover:bg-emerald-400/25">🎲 無盡隨機挑戰</button>
+          <button id="launch-button" type="button" class="rounded-full bg-amber-300 px-7 py-2.5 font-bold text-slate-900 transition hover:brightness-110">進入曲目闖關</button>
+        </div>
+
+        <!-- 首頁雙模式獨立前三名排行榜 -->
+        <div class="mt-6 grid gap-3 text-left sm:grid-cols-2">
+          <div class="rounded-2xl border border-amber-200/25 bg-slate-900/45 p-3.5">
+            <h2 class="mb-2 text-xs font-bold tracking-wider text-amber-200">🎵 曲目闖關榜（前三名）</h2>
+            <div id="start-song-leaderboard" class="space-y-1.5 text-xs"></div>
+          </div>
+          <div class="rounded-2xl border border-emerald-300/25 bg-slate-900/45 p-3.5">
+            <h2 class="mb-2 text-xs font-bold tracking-wider text-emerald-200">🎲 無盡挑戰榜（前三名）</h2>
+            <div id="start-endless-leaderboard" class="space-y-1.5 text-xs"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 主遊戲與音樂播放介面 -->
+    <main id="game-main" class="relative mx-auto hidden w-full max-w-3xl">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <button id="back-to-menu" type="button" class="rounded-full border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-white/15">← 返回選歌</button>
+        <div class="flex items-center gap-2">
+          <button id="toggle-endless-mode" type="button" class="rounded-full border border-emerald-300/40 bg-emerald-400/10 px-4 py-2 text-xs sm:text-sm font-semibold text-emerald-200 transition hover:bg-emerald-400/20">🎲 切換無盡模式</button>
+          <button id="creator-toggle" type="button" class="rounded-full border border-amber-300/50 bg-amber-300/10 px-4 py-2 text-xs sm:text-sm font-semibold text-amber-200 transition hover:bg-amber-300/20">🎹 創造者編曲面板</button>
+        </div>
+      </div>
+
+      <!-- 可視化互動創造者面板 -->
+      <section id="creator-panel" class="play-panel mb-6 hidden rounded-[2rem] border border-amber-300/30 p-5 sm:p-7" aria-labelledby="creator-title">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 id="creator-title" class="display-font text-xl font-bold text-amber-200">可視化旋律創造者面板</h2>
+            <p class="mt-1 text-xs sm:text-sm text-amber-100/75">點擊琴鍵譜曲、選擇歌曲分類或貼上 YouTube 連結，並可永久儲存至曲庫。</p>
+          </div>
+          <span id="creator-note-count" class="rounded-full border border-amber-200/30 bg-amber-200/10 px-3 py-1 text-xs font-bold text-amber-200">目前 8 個音符</span>
+        </div>
+
+        <!-- 點擊琴鍵互動編曲區 -->
+        <div class="mt-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
+          <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-semibold text-amber-200">🎹 點擊下方琴鍵直接譜曲（即時發聲）：</span>
+            <div class="flex flex-wrap gap-1.5">
+              <button id="creator-backspace" type="button" class="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1 text-xs font-semibold text-amber-100 hover:bg-white/15">⌫ 退格</button>
+              <button id="creator-clear" type="button" class="rounded-lg border border-rose-300/30 bg-rose-400/10 px-2.5 py-1 text-xs font-semibold text-rose-200 hover:bg-rose-400/20">🗑️ 清空</button>
+              <button id="creator-random" type="button" class="rounded-lg border border-emerald-300/30 bg-emerald-400/10 px-2.5 py-1 text-xs font-semibold text-emerald-200 hover:bg-emerald-400/20">🎲 隨機 8 音</button>
+              <button id="creator-preview-btn" type="button" class="rounded-lg border border-amber-300/45 bg-amber-300/20 px-2.5 py-1 text-xs font-bold text-amber-200 hover:bg-amber-300/30">▶ 試聽創作</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+            <button type="button" data-compose-note="0" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Do<span class="block text-[10px] opacity-70">0</span></button>
+            <button type="button" data-compose-note="1" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Re<span class="block text-[10px] opacity-70">1</span></button>
+            <button type="button" data-compose-note="2" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Mi<span class="block text-[10px] opacity-70">2</span></button>
+            <button type="button" data-compose-note="3" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Fa<span class="block text-[10px] opacity-70">3</span></button>
+            <button type="button" data-compose-note="4" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Sol<span class="block text-[10px] opacity-70">4</span></button>
+            <button type="button" data-compose-note="5" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">La<span class="block text-[10px] opacity-70">5</span></button>
+            <button type="button" data-compose-note="6" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Ti<span class="block text-[10px] opacity-70">6</span></button>
+            <button type="button" data-compose-note="7" class="rounded-xl border border-amber-200/25 bg-slate-800 py-2 text-center text-xs font-bold text-amber-100 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-900 active:scale-95">Do’<span class="block text-[10px] opacity-70">7</span></button>
+          </div>
+
+          <div id="creator-visual-chips" class="mt-3 flex flex-wrap items-center gap-1.5 min-h-[1.75rem] rounded-xl border border-white/5 bg-slate-950/40 p-2"></div>
+        </div>
+
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="mb-1 block text-xs sm:text-sm font-semibold" for="creator-song-title">歌曲名稱</label>
+            <input id="creator-song-title" class="w-full rounded-xl border border-amber-200/30 bg-white/10 px-3 py-2 text-sm text-amber-50" type="text">
+          </div>
+          <div>
+            <label class="mb-1 block text-xs sm:text-sm font-semibold" for="creator-category">所屬曲目分類</label>
+            <select id="creator-category" class="w-full rounded-xl border border-amber-200/30 bg-slate-800 px-3 py-2 text-sm text-amber-50">
+              <option value="custom">🎹 自訂創作</option>
+              <option value="cantopop">🇭🇰 香港流行曲</option>
+              <option value="classical">🎼 古典與傳統</option>
+            </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs sm:text-sm font-semibold text-amber-100" for="creator-youtube-url">原曲 YouTube 連結（選填，可內嵌播放）</label>
+            <input id="creator-youtube-url" placeholder="https://www.youtube.com/watch?v=..." class="w-full rounded-xl border border-amber-200/30 bg-white/10 px-3 py-2 text-sm text-amber-50 placeholder-amber-100/35" type="url">
+          </div>
+          <div>
+            <div class="mb-1 flex items-center justify-between">
+              <label class="text-xs sm:text-sm font-semibold" for="creator-tempo">每拍時間 (ms)</label>
+              <span id="creator-bpm-label" class="text-xs font-bold text-amber-300">約 188 BPM</span>
+            </div>
+            <div class="flex items-center gap-2.5">
+              <input id="creator-tempo-slider" type="range" min="160" max="1000" step="10" value="320" class="flex-1 cursor-pointer">
+              <input id="creator-tempo" class="w-20 rounded-xl border border-amber-200/30 bg-white/10 px-2.5 py-1.5 text-center text-sm text-amber-50" type="number" min="160" max="1200" step="10">
+            </div>
+          </div>
+          <div class="sm:col-span-2">
+            <label class="mb-1 block text-xs sm:text-sm font-semibold" for="creator-notes">音符數字序列 (0-7)</label>
+            <input id="creator-notes" class="w-full rounded-xl border border-amber-200/30 bg-white/10 px-3 py-1.5 text-sm text-amber-50" type="text" inputmode="numeric">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="mb-1 block text-xs sm:text-sm font-semibold" for="creator-lyrics">歌詞或樂曲簡介提示</label>
+            <textarea id="creator-lyrics" rows="2" class="w-full rounded-xl border border-amber-200/30 bg-white/10 px-3 py-2 text-sm text-amber-50"></textarea>
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2.5">
+          <button id="creator-apply" type="button" class="rounded-full bg-amber-300 px-5 py-2 text-sm font-bold text-slate-900 transition hover:brightness-110">套用並開始挑戰</button>
+          <button id="creator-save-new" type="button" class="rounded-full border border-emerald-300/50 bg-emerald-400/15 px-5 py-2 text-sm font-bold text-emerald-200 transition hover:bg-emerald-400/25">＋ 另存為新曲目</button>
+          <button id="creator-reset" type="button" class="rounded-full border border-amber-200/40 px-4 py-2 text-sm font-semibold transition hover:bg-white/10">還原預設曲庫</button>
+        </div>
+        <p id="creator-status" class="mt-3 text-sm text-amber-200" role="status" aria-live="polite"></p>
+      </section>
+
+      <header class="mb-6 text-center">
+        <div aria-hidden="true" class="ornament mx-auto mb-2 text-4xl text-amber-300">✦</div>
+        <p class="mb-1 text-xs uppercase tracking-[.3em] text-amber-200/80">STEAM 音樂編程</p>
+        <h1 class="display-font text-3xl sm:text-4xl font-bold leading-tight">音符記憶挑戰</h1>
+        <p class="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-amber-100/80">聆聽旋律並依序按下對應琴鍵，衝擊雙模式榮譽排行榜前三名！</p>
+      </header>
+
+      <section class="play-panel relative overflow-hidden rounded-[2rem] border border-white/10 p-5 sm:p-8" aria-labelledby="song-title">
+        <!-- 遊戲戰績儀表板 -->
+        <div class="mb-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <div class="rounded-2xl border border-white/10 bg-slate-900/45 px-3.5 py-2.5 text-center">
+            <p class="text-[11px] font-semibold tracking-wider text-amber-100/65">生命值</p>
+            <p id="lives-display" class="mt-0.5 text-lg tracking-widest" aria-label="剩餘生命值">❤️❤️❤️</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-slate-900/45 px-3.5 py-2.5 text-center">
+            <p class="text-[11px] font-semibold tracking-wider text-amber-100/65">目前得分</p>
+            <p id="score-value" class="display-font mt-0.5 text-xl font-bold text-amber-300">0</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-slate-900/45 px-3.5 py-2.5 text-center">
+            <p class="text-[11px] font-semibold tracking-wider text-amber-100/65">連擊加成</p>
+            <p id="combo-badge" class="mt-0.5 text-lg font-bold text-emerald-300">0 Combo</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-slate-900/45 px-3.5 py-2.5 text-center">
+            <p id="high-score-label" class="text-[11px] font-semibold tracking-wider text-amber-100/65">曲目榜首</p>
+            <p id="high-score-value" class="display-font mt-0.5 text-xl font-bold text-amber-100">0</p>
+          </div>
+        </div>
+
+        <!-- 曲目資訊與程式內原曲播放器 -->
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div class="flex-1 min-w-[240px]">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-xs tracking-widest text-amber-200/70">目前挑戰</p>
+              <span id="mode-badge" class="rounded-full border border-amber-300/35 bg-amber-300/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-200">曲目闖關模式</span>
+              <span id="song-category-badge" class="rounded-full border border-sky-300/35 bg-sky-400/15 px-2.5 py-0.5 text-[11px] font-bold text-sky-200">🇭🇰 香港流行曲</span>
+            </div>
+            <h2 id="song-title" class="display-font mt-1 text-xl sm:text-2xl font-bold"></h2>
+            <p id="song-disclaimer" class="mt-1 max-w-md text-xs sm:text-sm leading-relaxed text-amber-100/75"></p>
+
+            <!-- 程式內播放原曲按鈕與外部連結 -->
+            <div id="original-song-actions" class="mt-3 flex flex-wrap items-center gap-2">
+              <button id="toggle-original-player" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-rose-300/45 bg-rose-500/20 px-4 py-1.5 text-xs sm:text-sm font-bold text-rose-100 transition hover:bg-rose-500/30">🎧 程式內播放原曲</button>
+              <a id="song-link" class="inline-flex rounded-full border border-amber-200/40 px-4 py-1.5 text-xs sm:text-sm font-semibold transition hover:bg-white/10" href="#" target="_blank" rel="noopener noreferrer">外部開啟原曲 ↗</a>
+            </div>
+
+            <!-- 程式內嵌入原曲播放器面板 -->
+            <div id="original-player-drawer" class="mt-3 hidden rounded-2xl border border-rose-300/30 bg-slate-950/70 p-3.5">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <span id="original-player-title" class="text-xs font-bold text-rose-200">🎧 程式內原曲播放器</span>
+                <button id="close-original-player" type="button" class="rounded-lg bg-white/10 px-2 py-0.5 text-xs text-amber-100 hover:bg-white/20">✕ 關閉</button>
+              </div>
+              <div id="youtube-embed-wrapper" class="hidden overflow-hidden rounded-xl border border-white/10 bg-black">
+                <iframe id="youtube-embed-iframe" class="h-44 sm:h-52 w-full" src="" title="原曲播放器" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+              </div>
+              <div id="fallback-audio-wrapper" class="mt-2 space-y-2.5 text-xs text-amber-100/80">
+                <p id="embed-fallback-hint">若上方影片受版權方限制無法內嵌，可貼上其他 YouTube 影片網址或載入本機音訊檔播放：</p>
+                <div class="flex flex-wrap gap-2">
+                  <input id="inline-yt-input" type="url" placeholder="貼上 YouTube 影片網址（如 https://youtu.be/...）" class="flex-1 min-w-[180px] rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs text-amber-50">
+                  <button id="inline-yt-load-btn" type="button" class="rounded-xl bg-rose-400 px-3 py-1.5 font-bold text-slate-950 hover:brightness-110">內嵌播放</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 pt-1">
+                  <label class="cursor-pointer rounded-xl border border-amber-200/35 bg-white/5 px-3 py-1.5 font-semibold text-amber-200 hover:bg-white/15">
+                    📂 載入本機音訊檔 (MP3/WAV)
+                    <input id="local-audio-file" type="file" accept="audio/*" class="hidden">
+                  </label>
+                  <audio id="local-audio-player" controls class="hidden h-8 flex-1 min-w-[200px]"></audio>
+                </div>
+              </div>
+            </div>
+
+            <details class="mt-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5">
+              <summary class="cursor-pointer text-sm font-semibold">查看歌詞與樂曲簡介</summary>
+              <p id="lyrics-content" class="mt-2 whitespace-pre-line text-sm leading-relaxed text-amber-100/85"></p>
+            </details>
+          </div>
+          <div class="rounded-2xl border border-amber-200/20 bg-amber-200/10 px-5 py-3 text-center">
+            <p class="text-xs text-amber-200/80">目前回合</p>
+            <p id="round-value" class="display-font text-3xl font-bold text-amber-200" aria-live="polite">— / 8</p>
+          </div>
+        </div>
+
+        <!-- 內建示範音樂點播控制台（含分類切換） -->
+        <div class="mt-5 rounded-2xl border border-amber-200/25 bg-slate-900/45 p-4">
+          <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <p class="text-xs font-semibold tracking-wider text-amber-200">🎵 內建示範旋律播放器（琴鍵與樂譜同步發光）</p>
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <button id="pause-resume-btn" type="button" disabled class="rounded-lg border border-amber-200/35 bg-white/5 px-2.5 py-1 font-semibold text-amber-100 disabled:opacity-40 transition hover:bg-white/15">⏸ 暫停</button>
+              <button id="loop-toggle-btn" type="button" aria-pressed="false" class="rounded-lg border border-amber-200/35 bg-white/5 px-2.5 py-1 font-semibold text-amber-100 transition hover:bg-white/15">🔁 循環：關</button>
+              <label for="speed-select" class="text-amber-100/75 ml-1">速度：</label>
+              <select id="speed-select" class="rounded-lg border border-amber-200/30 bg-slate-800 px-2 py-1 text-amber-100 focus:outline-none">
+                <option value="0.8">0.8x 慢速</option>
+                <option value="1" selected>1.0x 正常</option>
+                <option value="1.25">1.25x 快速 (1.2x分)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 遊戲內曲目分類快速切換列 -->
+          <div id="main-category-tabs" class="mb-2.5 flex flex-wrap gap-1.5"></div>
+
+          <!-- 分類下的曲目快速點播按鈕 -->
+          <div id="main-song-buttons" class="flex flex-wrap gap-2"></div>
+
+          <div id="melody-visualizer" class="mt-3 flex flex-wrap items-center gap-1.5 min-h-[1.75rem]" aria-label="歌曲音符序列"></div>
+          <div class="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div id="playback-progress-bar" class="h-full w-0 bg-amber-300 transition-all duration-150"></div>
+          </div>
+        </div>
+
+        <div class="fine-line my-5"></div>
+
+        <!-- 回合進度點與即時狀態 -->
+        <div id="round-dots" class="mb-4 flex flex-wrap items-center justify-center gap-1.5" aria-label="回合進度指示"></div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p id="game-status" class="font-semibold text-amber-200" role="status" aria-live="polite">按「開始遊戲」挑戰記憶，或直接點播上方曲目。</p>
+            <p id="lyric-section" class="mt-1 text-sm text-amber-100/70" aria-live="polite">樂段進度：尚未開始</p>
+          </div>
+          <div class="text-right">
+            <span id="current-note-badge" class="inline-block rounded-lg border border-amber-200/25 bg-amber-200/10 px-2.5 py-1 text-xs font-bold text-amber-200">音符：—</span>
+            <p id="progress-value" class="mt-1 text-xs sm:text-sm text-amber-100/70" aria-live="polite">本輪進度 0 / 0</p>
+          </div>
+        </div>
+
+        <!-- 8 個音符琴鍵 -->
+        <div class="mt-5 grid grid-cols-4 gap-2 sm:grid-cols-8 sm:gap-3" role="group" aria-label="音符琴鍵">
+          <button type="button" data-note="0" aria-label="音符 Do，快捷鍵 1" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♪</span><span class="mt-1 text-xs sm:text-base font-bold">Do</span></button>
+          <button type="button" data-note="1" aria-label="音符 Re，快捷鍵 2" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♫</span><span class="mt-1 text-xs sm:text-base font-bold">Re</span></button>
+          <button type="button" data-note="2" aria-label="音符 Mi，快捷鍵 3" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♪</span><span class="mt-1 text-xs sm:text-base font-bold">Mi</span></button>
+          <button type="button" data-note="3" aria-label="音符 Fa，快捷鍵 4" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♫</span><span class="mt-1 text-xs sm:text-base font-bold">Fa</span></button>
+          <button type="button" data-note="4" aria-label="音符 Sol，快捷鍵 5" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♪</span><span class="mt-1 text-xs sm:text-base font-bold">Sol</span></button>
+          <button type="button" data-note="5" aria-label="音符 La，快捷鍵 6" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♫</span><span class="mt-1 text-xs sm:text-base font-bold">La</span></button>
+          <button type="button" data-note="6" aria-label="音符 Ti，快捷鍵 7" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♪</span><span class="mt-1 text-xs sm:text-base font-bold">Ti</span></button>
+          <button type="button" data-note="7" aria-label="高音 Do，快捷鍵 8" class="note-button flex flex-col items-center justify-center"><span aria-hidden="true" class="text-2xl sm:text-4xl">♫</span><span class="mt-1 text-xs sm:text-base font-bold">Do’</span></button>
+        </div>
+
+        <p class="mt-4 text-center text-xs sm:text-sm text-amber-100/75">快捷鍵：數字 1–8 彈奏琴鍵 ｜ 空白鍵 暫停/繼續 ｜ R 重聽本段</p>
+
+        <!-- 音色選擇 -->
+        <div class="mt-4 flex flex-wrap items-center justify-center gap-3">
+          <label class="text-sm font-semibold" for="instrument-select">選擇音色：</label>
+          <select id="instrument-select" class="rounded-full border border-amber-200/40 bg-slate-800 px-4 py-2 text-sm text-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-200">
+            <option value="triangle">鋼琴 (Triangle)</option>
+            <option value="sine">鐘琴 (Sine)</option>
+            <option value="square">風琴 (Square)</option>
+            <option value="sawtooth">弦樂 (Sawtooth)</option>
+            <option value="original">清亮合成 (Original)</option>
+          </select>
+        </div>
+
+        <div class="fine-line my-5"></div>
+
+        <!-- 遊戲主控制按鈕 -->
+        <div class="flex flex-wrap justify-center gap-3">
+          <button id="start-button" type="button" class="rounded-full bg-amber-300 px-6 py-3 font-bold text-slate-900 transition hover:brightness-110">開始遊戲</button>
+          <button id="replay-button" type="button" disabled class="rounded-full border border-amber-200/40 px-5 py-3 font-semibold disabled:opacity-40 transition hover:bg-white/10">重聽本段</button>
+          <button id="stop-button" type="button" disabled class="rounded-full border border-amber-200/40 px-5 py-3 font-semibold disabled:opacity-40 transition hover:bg-white/10">停止</button>
+          <button id="mute-button" type="button" aria-pressed="false" class="rounded-full border border-amber-200/40 px-5 py-3 font-semibold transition hover:bg-white/10">
+            <span id="mute-on">靜音</span><span id="mute-off" class="hidden">開啟聲音</span>
+          </button>
+        </div>
+
+        <!-- 主遊戲區雙模式獨立前三名排行榜 -->
+        <div class="mt-7 grid gap-4 sm:grid-cols-2">
+          <div id="song-board-card" class="rounded-2xl border border-amber-200/35 bg-slate-900/50 p-4 transition">
+            <div class="mb-2.5 flex items-center justify-between">
+              <h3 class="display-font text-base font-bold text-amber-200">🎵 曲目闖關榜（前三名）</h3>
+              <span class="text-[11px] text-amber-100/60">前三可留名</span>
+            </div>
+            <div id="main-song-leaderboard" class="space-y-1.5 text-xs sm:text-sm"></div>
+          </div>
+
+          <div id="endless-board-card" class="rounded-2xl border border-emerald-300/25 bg-slate-900/50 p-4 transition">
+            <div class="mb-2.5 flex items-center justify-between">
+              <h3 class="display-font text-base font-bold text-emerald-200">🎲 無盡挑戰榜（前三名）</h3>
+              <span class="text-[11px] text-emerald-100/60">前三可留名</span>
+            </div>
+            <div id="main-endless-leaderboard" class="space-y-1.5 text-xs sm:text-sm"></div>
+          </div>
+        </div>
+
+        <!-- 遊戲結算與對應模式前三名姓名登錄視窗 -->
+        <div id="result-overlay" class="absolute inset-0 z-20 hidden flex-col items-center justify-center bg-slate-950/92 p-6 text-center backdrop-blur-sm">
+          <div id="result-emoji" class="text-5xl sm:text-6xl mb-2">🏆</div>
+          <h3 id="result-title" class="display-font text-2xl sm:text-3xl font-bold text-amber-200">全曲挑戰成功！</h3>
+          <p id="result-subtitle" class="mt-1.5 max-w-md text-xs sm:text-sm text-amber-100/80"></p>
+
+          <!-- 前三名姓名登錄區塊 -->
+          <div id="leaderboard-entry-box" class="mt-4 hidden w-full max-w-sm rounded-2xl border border-amber-300/50 bg-amber-300/15 p-4">
+            <p id="rank-achieved-label" class="text-sm font-bold text-amber-200">🎉 恭喜榮登排行榜第 1 名！請寫上你的姓名：</p>
+            <div class="mt-2.5 flex gap-2">
+              <input id="player-name-input" type="text" maxlength="12" placeholder="輸入你的姓名（最多12字）" class="flex-1 rounded-xl border border-amber-200/40 bg-slate-900/80 px-3 py-2 text-sm text-amber-50 placeholder-amber-100/40">
+              <button id="save-score-btn" type="button" class="shrink-0 rounded-xl bg-amber-300 px-4 py-2 text-sm font-bold text-slate-900 transition hover:brightness-110">登錄榜單</button>
+            </div>
+            <p id="save-score-feedback" class="mt-2 text-xs font-semibold text-emerald-300 hidden">✅ 已成功將你的姓名寫入排行榜！</p>
+          </div>
+
+          <div class="mt-4 grid w-full max-w-sm grid-cols-3 gap-2.5 rounded-2xl border border-white/15 bg-white/5 p-3.5">
+            <div>
+              <p class="text-xs text-amber-100/65">最終得分</p>
+              <p id="result-score" class="display-font mt-1 text-2xl font-bold text-amber-300">0</p>
+            </div>
+            <div>
+              <p class="text-xs text-amber-100/65">最高連擊</p>
+              <p id="result-combo" class="display-font mt-1 text-2xl font-bold text-emerald-300">0</p>
+            </div>
+            <div>
+              <p id="result-best-label" class="text-xs text-amber-100/65">本榜最高</p>
+              <p id="result-best" class="display-font mt-1 text-2xl font-bold text-amber-100">0</p>
+            </div>
+          </div>
+
+          <div class="mt-5 flex flex-wrap justify-center gap-3">
+            <button id="result-retry-btn" type="button" class="rounded-full bg-amber-300 px-6 py-2.5 font-bold text-slate-900 transition hover:brightness-110">再玩一次</button>
+            <button id="result-switch-btn" type="button" class="rounded-full border border-emerald-300/50 bg-emerald-400/15 px-5 py-2.5 font-bold text-emerald-200 transition hover:bg-emerald-400/25">🎲 挑戰無盡模式</button>
+          </div>
+        </div>
+      </section>
+
+      <footer class="mt-6 text-center">
+        <p class="text-xs text-amber-100/65">支援香港流行曲與古典名曲分類、程式內原曲播放及雙模式榮譽排行榜</p>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      // 1. 曲目分類定義與預設曲庫
+      const CATEGORIES = {
+        all: { label: '全部曲目', icon: '🎶', badgeClass: 'border-amber-300/35 bg-amber-300/15 text-amber-200' },
+        cantopop: { label: '香港流行曲', icon: '🇭🇰', badgeClass: 'border-sky-300/35 bg-sky-400/15 text-sky-200' },
+        classical: { label: '古典與傳統', icon: '🎼', badgeClass: 'border-purple-300/35 bg-purple-400/15 text-purple-200' },
+        custom: { label: '自訂創作', icon: '🎹', badgeClass: 'border-emerald-300/35 bg-emerald-400/15 text-emerald-200' }
+      };
+
+      const originalSongs = [
+        {
+          category: 'cantopop',
+          title: '男人怎可以｜歌手：MC 張天賦',
+          disclaimer: '香港流行曲（2026）；曲：陳考威 / AP潘宇謙，詞：甄敏延，編：黃兆銘。支援程式內直接播放原曲 MV。',
+          lyrics: '「男人怎可以 任由淚水混和著汗水」—— MC 張天賦（詞：甄敏延）\n可點擊上方「程式內播放原曲」或外部連結收聽完整歌曲。',
+          url: 'https://www.youtube.com/watch?v=g1GBE8eeNyM',
+          melody: [4, 2, 0, 2, 4, 5, 4, 2, 1, 2, 4, 2, 0],
+          beats: [0.75, 0.75, 1, 0.75, 0.75, 1.25, 0.75, 0.75, 0.75, 0.75, 1, 0.75, 1.5],
+          beatMs: 410
+        },
+        {
+          category: 'cantopop',
+          title: '旋轉木馬｜歌手：米爺 和 Feanna Wong',
+          disclaimer: '香港流行曲；歌手：米爺 和 Feanna Wong。點擊「程式內播放原曲」可直接在頁面內嵌播放原曲。',
+          lyrics: '大好きですよ 愛してるよ\n即使我落晒妝還是每日也深愛着我\n我跟你 或會在 旋轉木馬中相擁',
+          url: 'https://music.youtube.com/watch?v=N4hKAVbncCE&si=mC1qKtjr6IfiGSpR',
+          melody: [0, 2, 4, 5, 4, 2, 1, 0],
+          beats: [1, 0.5, 0.5, 1, 1.5, 0.5, 0.5, 1.5],
+          beatMs: 320
+        },
+        {
+          category: 'cantopop',
+          title: '用背脊唱情歌｜歌手：湯令山',
+          disclaimer: '香港流行曲；歌手：湯令山。支援程式內貼上影片網址或載入本機音訊播放原曲。',
+          lyrics: '眼淚若嫌多用背脊唱情歌',
+          url: 'https://music.youtube.com/search?q=%E7%94%A8%E8%83%8C%E8%84%8A%E5%94%B1%E6%83%85%E6%AD%8C%20%E6%B9%AF%E4%BB%A4%E5%B1%B1',
+          melody: [4, 5, 7, 6, 4, 2, 3, 1, 4, 2, 1],
+          beats: [0.75, 0.75, 1, 1, 1, 0.5, 0.5, 1, 0.75, 0.75, 1.5],
+          beatMs: 440
+        },
+        {
+          category: 'classical',
+          title: '歡樂頌｜作曲：貝多芬 (Beethoven)',
+          disclaimer: '古典交響名曲；選自貝多芬《第九交響曲》第四樂章（公共領域）。支援程式內播放交響樂版原曲。',
+          lyrics: '歡樂女神聖潔美麗，燦爛光芒照大地\n我們心中充滿熱情，來到你的聖殿裡',
+          url: 'https://www.youtube.com/watch?v=uooe16ILaPo',
+          melody: [2, 2, 3, 4, 4, 3, 2, 1, 0, 0, 1, 2, 2, 1, 1],
+          beats: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.5, 0.5, 2],
+          beatMs: 360
+        },
+        {
+          category: 'classical',
+          title: '小星星｜傳統民謠（無特定歌手）',
+          disclaimer: '傳統兒歌；旋律源自法國民謠，英文歌詞由 Jane Taylor 創作。支援程式內原曲播放。',
+          lyrics: '一閃一閃亮晶晶，滿天都是小星星\n掛在天空放光明，好像許多小眼睛',
+          url: 'https://music.youtube.com/watch?v=yCjJyiqpAuU',
+          melody: [0, 0, 4, 4, 5, 5, 4],
+          beats: [1, 1, 1, 1, 1, 1, 2],
+          beatMs: 480,
+          rounds: 7
+        }
+      ];
+
+      const CUSTOM_SONGS_KEY = 'note_memory_custom_songs_v1';
+      const LEADERBOARD_SONG_KEY = 'note_memory_top3_song';
+      const LEADERBOARD_ENDLESS_KEY = 'note_memory_top3_endless';
+
+      function loadInitialSongs() {
+        const base = originalSongs.map(s => ({ ...s, melody: [...s.melody], beats: [...s.beats] }));
+        try {
+          const saved = JSON.parse(localStorage.getItem(CUSTOM_SONGS_KEY) || '[]');
+          if (Array.isArray(saved)) {
+            saved.forEach(item => {
+              if (item && item.title && Array.isArray(item.melody) && item.melody.length > 0) {
+                base.push({
+                  category: CATEGORIES[item.category] ? item.category : 'custom',
+                  title: String(item.title),
+                  disclaimer: String(item.disclaimer || '自訂創作曲目。'),
+                  lyrics: String(item.lyrics || '（自訂樂譜）'),
+                  url: String(item.url || 'https://music.youtube.com/'),
+                  melody: item.melody.map(Number),
+                  beats: Array.isArray(item.beats) ? item.beats : item.melody.map(() => 1),
+                  beatMs: Number(item.beatMs) || 320
+                });
+              }
+            });
+          }
+        } catch (_) {}
+        return base;
+      }
+
+      function persistCustomSongs() {
+        try {
+          const customOnes = songs.slice(originalSongs.length);
+          localStorage.setItem(CUSTOM_SONGS_KEY, JSON.stringify(customOnes));
+        } catch (_) {}
+      }
+
+      let songs = loadInitialSongs();
+      let activeCategory = 'all';
+      let selectedSongIndex = 0;
+      let selectedSong = songs[0];
+      let melody = selectedSong.melody;
+      let isEndless = false;
+
+      const shortSolfege = ['Do', 'Re', 'Mi', 'Fa', 'Sol', 'La', 'Ti', 'Do’'];
+      const noteNames = ['Do (1)', 'Re (2)', 'Mi (3)', 'Fa (4)', 'Sol (5)', 'La (6)', 'Ti (7)', 'Do’ (8)'];
+      const frequencies = [261.625565, 293.664768, 329.627557, 349.228231, 391.995436, 440.000000, 493.883301, 523.251131];
+      const totalRounds = () => (isEndless ? Infinity : (selectedSong.rounds || melody.length));
+
+      // 2. DOM 元素綁定
+      const $ = id => document.getElementById(id);
+      const startScreen = $('start-screen');
+      const gameMain = $('game-main');
+      const launchButton = $('launch-button');
+      const launchEndlessButton = $('launch-endless-button');
+      const toggleEndlessBtn = $('toggle-endless-mode');
+      const backToMenu = $('back-to-menu');
+      const startCategoryTabs = $('start-category-tabs');
+      const mainCategoryTabs = $('main-category-tabs');
+      const startSongList = $('start-song-list');
+      const mainSongButtons = $('main-song-buttons');
+      const previewAllStart = $('preview-all-start');
+      const pauseResumeBtn = $('pause-resume-btn');
+      const loopToggleBtn = $('loop-toggle-btn');
+      const melodyVisualizer = $('melody-visualizer');
+      const startPreviewStatus = $('start-preview-status');
+      const speedSelect = $('speed-select');
+      const progressBar = $('playback-progress-bar');
+      const currentNoteBadge = $('current-note-badge');
+      const roundDotsContainer = $('round-dots');
+      const modeBadge = $('mode-badge');
+      const songCategoryBadge = $('song-category-badge');
+
+      // 程式內原曲播放器元素
+      const originalSongActions = $('original-song-actions');
+      const toggleOriginalPlayerBtn = $('toggle-original-player');
+      const originalPlayerDrawer = $('original-player-drawer');
+      const closeOriginalPlayerBtn = $('close-original-player');
+      const originalPlayerTitle = $('original-player-title');
+      const youtubeEmbedWrapper = $('youtube-embed-wrapper');
+      const youtubeEmbedIframe = $('youtube-embed-iframe');
+      const embedFallbackHint = $('embed-fallback-hint');
+      const inlineYtInput = $('inline-yt-input');
+      const inlineYtLoadBtn = $('inline-yt-load-btn');
+      const localAudioFile = $('local-audio-file');
+      const localAudioPlayer = $('local-audio-player');
+
+      // 戰績與雙榜元素
+      const livesDisplay = $('lives-display');
+      const scoreValueEl = $('score-value');
+      const comboBadgeEl = $('combo-badge');
+      const highScoreLabelEl = $('high-score-label');
+      const highScoreEl = $('high-score-value');
+      const startSongLeaderboard = $('start-song-leaderboard');
+      const startEndlessLeaderboard = $('start-endless-leaderboard');
+      const mainSongLeaderboard = $('main-song-leaderboard');
+      const mainEndlessLeaderboard = $('main-endless-leaderboard');
+      const songBoardCard = $('song-board-card');
+      const endlessBoardCard = $('endless-board-card');
+
+      const resultOverlay = $('result-overlay');
+      const resultEmoji = $('result-emoji');
+      const resultTitle = $('result-title');
+      const resultSubtitle = $('result-subtitle');
+      const resultScore = $('result-score');
+      const resultCombo = $('result-combo');
+      const resultBest = $('result-best');
+      const resultBestLabel = $('result-best-label');
+      const resultSwitchBtn = $('result-switch-btn');
+      const leaderboardEntryBox = $('leaderboard-entry-box');
+      const rankAchievedLabel = $('rank-achieved-label');
+      const playerNameInput = $('player-name-input');
+      const saveScoreBtn = $('save-score-btn');
+      const saveScoreFeedback = $('save-score-feedback');
+
+      const songTitle = $('song-title');
+      const songDisclaimer = $('song-disclaimer');
+      const lyricsContent = $('lyrics-content');
+      const songLink = $('song-link');
+      const keys = [...document.querySelectorAll('[data-note]')];
+      const flashTimers = new Array(keys.length).fill(null);
+
+      const instrumentSelect = $('instrument-select');
+      const startBtn = $('start-button');
+      const replayBtn = $('replay-button');
+      const stopBtn = $('stop-button');
+      const muteBtn = $('mute-button');
+      const statusEl = $('game-status');
+      const roundDisplay = $('round-value');
+      const progressDisplay = $('progress-value');
+      const lyricSection = $('lyric-section');
+
+      // 創造者面板元素
+      const creatorPanel = $('creator-panel');
+      const creatorToggle = $('creator-toggle');
+      const creatorTitle = $('creator-song-title');
+      const creatorCategory = $('creator-category');
+      const creatorYoutubeUrl = $('creator-youtube-url');
+      const creatorTempo = $('creator-tempo');
+      const creatorTempoSlider = $('creator-tempo-slider');
+      const creatorBpmLabel = $('creator-bpm-label');
+      const creatorNotes = $('creator-notes');
+      const creatorLyrics = $('creator-lyrics');
+      const creatorVisualChips = $('creator-visual-chips');
+      const creatorNoteCount = $('creator-note-count');
+      const creatorStatus = $('creator-status');
+
+      let audioContext = null, delayNode = null, feedbackGain = null, wetGain = null;
+      let round = 0, position = 0, playing = false, paused = false, loopPlayback = false, active = false, muted = false, token = 0;
+      let lives = 3, score = 0, combo = 0, maxCombo = 0, scoreSaved = false;
+      let activePreviewKey = null;
+      let activeOscillators = [];
+      let localAudioObjectUrl = null;
+
+      const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+      const getSpeed = () => Number(speedSelect?.value || 1);
+      const randomNote = () => Math.floor(Math.random() * 8);
+
+      // 3. 歌曲分類輔助函式
+      function getFilteredSongEntries() {
+        return songs
+          .map((song, index) => ({ song, index }))
+          .filter(({ song }) => activeCategory === 'all' || song.category === activeCategory);
+      }
+
+      function setCategoryFilter(catKey) {
+        activeCategory = catKey;
+        const filtered = getFilteredSongEntries();
+        if (filtered.length > 0 && !filtered.some(item => item.index === selectedSongIndex)) {
+          selectedSongIndex = filtered[0].index;
+        }
+        renderCategoryTabs();
+        renderSongSelectors();
+      }
+
+      function renderCategoryTabs() {
+        const counts = { all: songs.length, cantopop: 0, classical: 0, custom: 0 };
+        songs.forEach(s => {
+          if (counts[s.category] !== undefined) counts[s.category]++;
+        });
+
+        // 首頁分類標籤
+        startCategoryTabs.innerHTML = '';
+        Object.entries(CATEGORIES).forEach(([key, meta]) => {
+          const btn = document.createElement('button');
+          const isSelected = activeCategory === key;
+          btn.type = 'button';
+          btn.setAttribute('role', 'tab');
+          btn.setAttribute('aria-selected', String(isSelected));
+          btn.className = `rounded-full border px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition ${
+            isSelected
+              ? 'border-amber-300 bg-amber-300 text-slate-900 shadow-[0_0_15px_#f1c87866]'
+              : 'border-white/15 bg-white/5 text-amber-100/80 hover:bg-white/15'
+          }`;
+          btn.textContent = `${meta.icon} ${meta.label} (${counts[key]})`;
+          btn.addEventListener('click', () => setCategoryFilter(key));
+          startCategoryTabs.appendChild(btn);
+        });
+
+        // 遊戲內分類標籤
+        mainCategoryTabs.innerHTML = '';
+        Object.entries(CATEGORIES).forEach(([key, meta]) => {
+          const btn = document.createElement('button');
+          const isSelected = activeCategory === key;
+          btn.type = 'button';
+          btn.className = `rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition ${
+            isSelected
+              ? 'border-amber-300/70 bg-amber-300/25 text-amber-200'
+              : 'border-white/10 bg-white/5 text-amber-100/65 hover:bg-white/10'
+          }`;
+          btn.textContent = `${meta.icon} ${meta.label} (${counts[key]})`;
+          btn.addEventListener('click', () => setCategoryFilter(key));
+          mainCategoryTabs.appendChild(btn);
+        });
+
+        const catLabel = CATEGORIES[activeCategory]?.label || '全部曲目';
+        if (previewAllStart) {
+          previewAllStart.textContent = activeCategory === 'all' ? '▶ 連播全部曲目' : `▶ 連播「${catLabel}」`;
+        }
+      }
+
+      // 4. 雙模式獨立前三名排行榜系統
+      function getBoardKey(endlessFlag) {
+        return endlessFlag ? LEADERBOARD_ENDLESS_KEY : LEADERBOARD_SONG_KEY;
+      }
+
+      function loadLeaderboard(endlessFlag) {
+        try {
+          const raw = localStorage.getItem(getBoardKey(endlessFlag));
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
+        } catch (_) {
+          return [];
+        }
+      }
+
+      function saveLeaderboard(board, endlessFlag) {
+        try {
+          localStorage.setItem(getBoardKey(endlessFlag), JSON.stringify(board.slice(0, 3)));
+        } catch (_) {}
+      }
+
+      function getQualifyingRank(currentScore, endlessFlag) {
+        if (currentScore <= 0) return null;
+        const board = loadLeaderboard(endlessFlag);
+        for (let i = 0; i < 3; i++) {
+          if (!board[i] || currentScore > board[i].score) return i + 1;
+        }
+        return null;
+      }
+
+      function renderSingleBoard(container, board, accentClass) {
+        if (!container) return;
+        container.innerHTML = '';
+        const medals = ['🥇 第1名', '🥈 第2名', '🥉 第3名'];
+        const rowStyles = [
+          'border-amber-300/45 bg-amber-300/15 text-amber-100',
+          'border-slate-300/35 bg-slate-300/10 text-slate-100',
+          'border-amber-600/40 bg-amber-700/15 text-amber-100/90'
+        ];
+
+        for (let i = 0; i < 3; i++) {
+          const entry = board[i];
+          const row = document.createElement('div');
+          row.className = `flex items-center justify-between rounded-xl border px-3 py-1.5 ${rowStyles[i]}`;
+
+          const left = document.createElement('div');
+          left.className = 'flex items-center gap-2 truncate';
+
+          const medalSpan = document.createElement('span');
+          medalSpan.className = 'shrink-0 font-bold';
+          medalSpan.textContent = medals[i];
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = entry ? 'font-semibold truncate' : 'text-amber-100/40 italic';
+          nameSpan.textContent = entry ? entry.name : '虛位以待';
+
+          left.appendChild(medalSpan);
+          left.appendChild(nameSpan);
+
+          if (entry?.detail) {
+            const tag = document.createElement('span');
+            tag.className = 'hidden sm:inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-amber-100/75 truncate max-w-[90px]';
+            tag.textContent = entry.detail;
+            left.appendChild(tag);
+          }
+
+          const right = document.createElement('span');
+          right.className = `shrink-0 display-font font-bold ${accentClass}`;
+          right.textContent = entry ? `${entry.score} 分` : '—';
+
+          row.appendChild(left);
+          row.appendChild(right);
+          container.appendChild(row);
+        }
+      }
+
+      function renderAllLeaderboards() {
+        const songBoard = loadLeaderboard(false);
+        const endlessBoard = loadLeaderboard(true);
+
+        renderSingleBoard(startSongLeaderboard, songBoard, 'text-amber-300');
+        renderSingleBoard(startEndlessLeaderboard, endlessBoard, 'text-emerald-300');
+        renderSingleBoard(mainSongLeaderboard, songBoard, 'text-amber-300');
+        renderSingleBoard(mainEndlessLeaderboard, endlessBoard, 'text-emerald-300');
+
+        const activeBoard = isEndless ? endlessBoard : songBoard;
+        const topScore = activeBoard[0]?.score || 0;
+        highScoreLabelEl.textContent = isEndless ? '無盡榜首' : '曲目榜首';
+        highScoreEl.textContent = String(Math.max(topScore, score));
+
+        if (songBoardCard && endlessBoardCard) {
+          songBoardCard.classList.toggle('ring-2', !isEndless);
+          songBoardCard.classList.toggle('ring-amber-300/60', !isEndless);
+          endlessBoardCard.classList.toggle('ring-2', isEndless);
+          endlessBoardCard.classList.toggle('ring-emerald-300/60', isEndless);
+        }
+      }
+
+      function registerPlayerScore() {
+        if (scoreSaved) return;
+        const playerName = playerNameInput.value.trim() || '匿名挑戰者';
+        const board = loadLeaderboard(isEndless);
+        board.push({
+          name: playerName,
+          score,
+          detail: isEndless ? `第${round}關` : selectedSong.title.split('｜')[0],
+          combo: maxCombo
+        });
+        board.sort((a, b) => b.score - a.score);
+        saveLeaderboard(board.slice(0, 3), isEndless);
+
+        scoreSaved = true;
+        playerNameInput.disabled = true;
+        saveScoreBtn.disabled = true;
+        saveScoreBtn.classList.add('opacity-50');
+        saveScoreFeedback.classList.remove('hidden');
+        renderAllLeaderboards();
+        resultBest.textContent = String(loadLeaderboard(isEndless)[0]?.score || score);
+      }
+
+      saveScoreBtn.addEventListener('click', registerPlayerScore);
+      playerNameInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') registerPlayerScore();
+      });
+
+      // 5. 程式內原曲播放器邏輯（YouTube 嵌入 + 本機音訊）
+      function extractYoutubeId(url) {
+        if (!url) return null;
+        const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/);
+        return match ? match[1] : null;
+      }
+
+      function stopOriginalPlayer() {
+        if (youtubeEmbedIframe) youtubeEmbedIframe.src = '';
+        if (localAudioPlayer && !localAudioPlayer.paused) localAudioPlayer.pause();
+      }
+
+      function openOriginalPlayerForCurrentSong(customUrl = null) {
+        cancelPlayback();
+        originalPlayerDrawer.classList.remove('hidden');
+        const targetUrl = customUrl || selectedSong.url;
+        const videoId = extractYoutubeId(targetUrl);
+        originalPlayerTitle.textContent = `🎧 程式內原曲播放：${selectedSong.title.split('｜')[0]}`;
+
+        if (videoId) {
+          youtubeEmbedWrapper.classList.remove('hidden');
+          youtubeEmbedIframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+          embedFallbackHint.textContent = '若上方影片顯示「無法播放」（部分唱片公司禁止外部網站嵌入），你可於下方載入本機音訊檔或點擊「外部開啟原曲」：';
+        } else {
+          youtubeEmbedWrapper.classList.add('hidden');
+          youtubeEmbedIframe.src = '';
+          embedFallbackHint.textContent = '此曲目目前為搜尋連結，請貼上直接的 YouTube 影片網址或載入本機音訊檔即可於程式內播放：';
+        }
+      }
+
+      toggleOriginalPlayerBtn.addEventListener('click', () => {
+        if (originalPlayerDrawer.classList.contains('hidden')) {
+          openOriginalPlayerForCurrentSong();
+        } else {
+          stopOriginalPlayer();
+          originalPlayerDrawer.classList.add('hidden');
+        }
+      });
+
+      closeOriginalPlayerBtn.addEventListener('click', () => {
+        stopOriginalPlayer();
+        originalPlayerDrawer.classList.add('hidden');
+      });
+
+      inlineYtLoadBtn.addEventListener('click', () => {
+        const pastedUrl = inlineYtInput.value.trim();
+        const videoId = extractYoutubeId(pastedUrl);
+        if (!videoId) {
+          embedFallbackHint.textContent = '⚠️ 無法辨識 YouTube 影片網址，請確認網址包含 watch?v= 或 youtu.be/。';
+          return;
+        }
+        selectedSong.url = pastedUrl;
+        songLink.href = pastedUrl;
+        openOriginalPlayerForCurrentSong(pastedUrl);
+      });
+
+      localAudioFile.addEventListener('change', e => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        cancelPlayback();
+        youtubeEmbedIframe.src = '';
+        if (localAudioObjectUrl) URL.revokeObjectURL(localAudioObjectUrl);
+        localAudioObjectUrl = URL.createObjectURL(file);
+        localAudioPlayer.src = localAudioObjectUrl;
+        localAudioPlayer.classList.remove('hidden');
+        localAudioPlayer.play().catch(() => {});
+        originalPlayerTitle.textContent = `🎧 正在播放本機音訊：${file.name}`;
+      });
+
+      // 6. 動態分類歌單渲染
+      function renderSongSelectors() {
+        const filtered = getFilteredSongEntries();
+        startSongList.innerHTML = '';
+
+        if (filtered.length === 0) {
+          const emptyTip = document.createElement('div');
+          emptyTip.className = 'rounded-2xl border border-white/10 bg-white/5 p-5 text-center text-sm text-amber-100/65';
+          emptyTip.textContent = '此分類暫無自訂曲目，進入遊戲後開啟「創造者編曲面板」即可新增！';
+          startSongList.appendChild(emptyTip);
+        } else {
+          filtered.forEach(({ song, index }, displayOrder) => {
+            const catMeta = CATEGORIES[song.category] || CATEGORIES.custom;
+            const row = document.createElement('div');
+            row.className = 'flex items-stretch gap-2';
+
+            const selectBtn = document.createElement('button');
+            selectBtn.type = 'button';
+            selectBtn.className = `flex-1 rounded-2xl border border-amber-200/30 px-4 py-3 text-left transition hover:bg-white/10 ${index === selectedSongIndex ? 'bg-amber-200/20 ring-1 ring-amber-300/60' : ''}`;
+            selectBtn.setAttribute('aria-pressed', String(index === selectedSongIndex));
+
+            const topLine = document.createElement('div');
+            topLine.className = 'flex flex-wrap items-center gap-2';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'text-sm sm:text-base font-semibold text-amber-50';
+            titleSpan.textContent = `${displayOrder + 1}. ${song.title}`;
+
+            const badge = document.createElement('span');
+            badge.className = `rounded-full border px-2 py-0.5 text-[10px] font-bold ${catMeta.badgeClass}`;
+            badge.textContent = `${catMeta.icon} ${catMeta.label}`;
+
+            topLine.appendChild(titleSpan);
+            topLine.appendChild(badge);
+            selectBtn.appendChild(topLine);
+
+            selectBtn.addEventListener('click', () => {
+              selectedSongIndex = index;
+              renderSongSelectors();
+            });
+
+            const previewBtn = document.createElement('button');
+            previewBtn.type = 'button';
+            previewBtn.dataset.previewSong = String(index);
+            previewBtn.className = 'preview-song-btn shrink-0 rounded-2xl border border-amber-300/40 bg-amber-300/15 px-4 py-3 text-sm font-bold text-amber-200 transition hover:bg-amber-300/25';
+            previewBtn.textContent = '▶ 試聽';
+            previewBtn.addEventListener('click', () => playPresetSongs([index], String(index)));
+
+            row.appendChild(selectBtn);
+            row.appendChild(previewBtn);
+            startSongList.appendChild(row);
+          });
+        }
+
+        // 主遊戲區快速點播列（依目前分類顯示）
+        mainSongButtons.innerHTML = '';
+        filtered.forEach(({ song, index }, displayOrder) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.dataset.previewSong = String(index);
+          const isCurrent = !isEndless && index === selectedSongIndex;
+          btn.className = `preview-song-btn rounded-full border px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition ${
+            isCurrent
+              ? 'border-amber-300 bg-amber-300/25 text-amber-200'
+              : 'border-amber-200/35 bg-white/5 text-amber-100 hover:bg-amber-300/20'
+          }`;
+          const shortTitle = song.title.split('｜')[0];
+          btn.textContent = `▶ ${displayOrder + 1}. ${shortTitle}`;
+          btn.addEventListener('click', () => playPresetSongs([index], String(index)));
+          mainSongButtons.appendChild(btn);
+        });
+
+        if (filtered.length > 0) {
+          const allBtn = document.createElement('button');
+          allBtn.id = 'preview-all-main';
+          allBtn.type = 'button';
+          allBtn.className = 'rounded-full border border-amber-300/50 bg-amber-300/15 px-3.5 py-1.5 text-xs sm:text-sm font-bold text-amber-200 transition hover:bg-amber-300/30';
+          allBtn.textContent = activeCategory === 'all' ? '▶ 連播全部' : '▶ 連播本類';
+          allBtn.addEventListener('click', () => {
+            const indices = getFilteredSongEntries().map(item => item.index);
+            playPresetSongs(indices, 'all');
+          });
+          mainSongButtons.appendChild(allBtn);
+        }
+      }
+
+      // 7. 動態簡譜序列視覺化
+      function renderMelodyVisualizer(notesArray = melody, activeIndex = -1) {
+        melodyVisualizer.innerHTML = '';
+        notesArray.forEach((noteVal, idx) => {
+          const pill = document.createElement('span');
+          const isCurrent = idx === activeIndex;
+          const isPlayed = activeIndex >= 0 && idx < activeIndex;
+          pill.className = `inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-bold transition-all duration-150 ${
+            isCurrent
+              ? 'bg-amber-300 text-slate-900 scale-110 shadow-[0_0_12px_#f1c878]'
+              : isPlayed
+              ? 'bg-amber-300/25 text-amber-200 border border-amber-300/30'
+              : 'bg-white/5 text-amber-100/60 border border-white/10'
+          }`;
+          pill.textContent = shortSolfege[noteVal];
+          melodyVisualizer.appendChild(pill);
+        });
+      }
+
+      function setupModeUI(endlessMode, songIdx = selectedSongIndex) {
+        isEndless = endlessMode;
+        resultOverlay.classList.add('hidden');
+        resultOverlay.classList.remove('flex');
+        if (isEndless) {
+          stopOriginalPlayer();
+          originalPlayerDrawer.classList.add('hidden');
+          originalSongActions.classList.add('hidden');
+          songCategoryBadge.classList.add('hidden');
+          modeBadge.textContent = '無盡挑戰模式';
+          modeBadge.className = 'rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2.5 py-0.5 text-[11px] font-bold text-emerald-200';
+          toggleEndlessBtn.textContent = '🎵 切回曲目模式';
+          songTitle.textContent = '🎲 無盡隨機旋律挑戰';
+          songDisclaimer.textContent = '每過一關自動增加一個隨機音符，挑戰無盡排行榜前三名！';
+          lyricsContent.textContent = '無盡模式由電腦即時隨機編曲，沒有固定歌詞。';
+          melodyVisualizer.innerHTML = '<span class="text-xs text-emerald-200/70">無盡模式：旋律隨關卡隨機生成</span>';
+        } else {
+          originalSongActions.classList.remove('hidden');
+          songCategoryBadge.classList.remove('hidden');
+          modeBadge.textContent = '曲目闖關模式';
+          modeBadge.className = 'rounded-full border border-amber-300/35 bg-amber-300/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-200';
+          toggleEndlessBtn.textContent = '🎲 切換無盡模式';
+          selectedSongIndex = songIdx;
+          selectedSong = songs[songIdx];
+          melody = selectedSong.melody;
+
+          const catMeta = CATEGORIES[selectedSong.category] || CATEGORIES.custom;
+          songCategoryBadge.textContent = `${catMeta.icon} ${catMeta.label}`;
+          songCategoryBadge.className = `rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${catMeta.badgeClass}`;
+
+          songTitle.textContent = selectedSong.title;
+          songDisclaimer.textContent = selectedSong.disclaimer;
+          lyricsContent.textContent = selectedSong.lyrics;
+          songLink.href = selectedSong.url;
+          renderMelodyVisualizer(melody, -1);
+          renderSongSelectors();
+          if (!originalPlayerDrawer.classList.contains('hidden')) {
+            openOriginalPlayerForCurrentSong();
+          }
+        }
+        renderAllLeaderboards();
+      }
+
+      // 8. Web Audio API 聲音合成引擎
+      function ensureAudio() {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          delayNode = audioContext.createDelay();
+          delayNode.delayTime.value = 0.22;
+          feedbackGain = audioContext.createGain();
+          feedbackGain.gain.value = 0.22;
+          wetGain = audioContext.createGain();
+          wetGain.gain.value = 0.16;
+
+          delayNode.connect(feedbackGain);
+          feedbackGain.connect(delayNode);
+          delayNode.connect(wetGain);
+          wetGain.connect(audioContext.destination);
+        }
+        if (audioContext.state === 'suspended') audioContext.resume();
+      }
+
+      function createTone(type, frequency, duration, volume = .13, offset = 0, detune = 0) {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter();
+        const startAt = audioContext.currentTime + offset;
+        const profiles = {
+          triangle: { attack: .016, release: .18, cutoff: 3800, endCutoff: 5400, q: .35, peak: 1 },
+          sine: { attack: .03, release: .22, cutoff: 5400, endCutoff: 7400, q: .25, peak: .8 },
+          square: { attack: .012, release: .14, cutoff: 1300, endCutoff: 1900, q: .55, peak: .62 },
+          sawtooth: { attack: .02, release: .2, cutoff: 2200, endCutoff: 3800, q: .8, peak: .48 },
+          original: { attack: .014, release: .16, cutoff: 4800, endCutoff: 8400, q: .28, peak: .92 }
+        };
+        const profile = profiles[type] || profiles.triangle;
+        const attack = Math.min(profile.attack, duration * .2);
+        const release = Math.min(profile.release, Math.max(.06, duration * .45));
+        const peak = volume * profile.peak;
+
+        oscillator.type = type === 'original' ? 'triangle' : type;
+        oscillator.frequency.setValueAtTime(frequency, startAt);
+        oscillator.detune.setValueAtTime(detune, startAt);
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(profile.cutoff, startAt);
+        filter.frequency.exponentialRampToValueAtTime(profile.endCutoff, startAt + Math.min(.12, duration));
+        filter.Q.setValueAtTime(profile.q, startAt);
+
+        gain.gain.setValueAtTime(.0001, startAt);
+        gain.gain.linearRampToValueAtTime(peak, startAt + attack);
+        gain.gain.exponentialRampToValueAtTime(Math.max(.0001, peak * .48), startAt + Math.max(attack, duration - release));
+        gain.gain.exponentialRampToValueAtTime(.0001, startAt + duration);
+
+        oscillator.connect(filter).connect(gain);
+        gain.connect(audioContext.destination);
+        if (delayNode) gain.connect(delayNode);
+
+        oscillator.start(startAt);
+        oscillator.stop(startAt + duration + .05);
+        activeOscillators.push(oscillator);
+        oscillator.onended = () => { activeOscillators = activeOscillators.filter(item => item !== oscillator); };
+      }
+
+      function sound(note, duration = .36) {
+        if (muted) return;
+        try {
+          ensureAudio();
+          const frequency = frequencies[note];
+          const type = instrumentSelect.value;
+          createTone(type, frequency, duration, type === 'sine' ? .16 : .13);
+          if (type === 'sine') createTone('sine', frequency * 2, Math.min(duration * .45, .32), .014);
+          if (type === 'triangle') createTone('sine', frequency * 2, Math.min(duration * .52, .36), .015);
+          if (type === 'sawtooth') createTone('triangle', frequency * 2, Math.min(duration * .45, .3), .012);
+          if (type !== 'square') createTone('triangle', frequency / 2, Math.min(duration * .75, .34), .016);
+        } catch (_) {
+          statusEl.textContent = '聲音無法播放，仍可跟隨亮燈遊玩。';
+        }
+      }
+
+      function playGameSFX(kind) {
+        if (muted) return;
+        try {
+          ensureAudio();
+          if (kind === 'clear') {
+            [523.25, 659.25, 783.99].forEach((f, idx) => createTone('sine', f, .18, .09, idx * .065));
+          } else if (kind === 'victory') {
+            [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => createTone('triangle', f, .35, .13, idx * .09));
+          } else if (kind === 'error') {
+            createTone('sawtooth', 146.83, .28, .12, 0);
+            createTone('sawtooth', 138.59, .32, .12, .08);
+          }
+        } catch (_) {}
+      }
+
+      function silence() {
+        activeOscillators.forEach(osc => { try { osc.stop(); } catch (_) {} });
+        activeOscillators = [];
+      }
+
+      // 9. 琴鍵發光控制
+      function flash(note, duration = 320, stateClass = 'is-lit') {
+        const key = keys[note];
+        if (!key) return;
+        if (flashTimers[note]) clearTimeout(flashTimers[note]);
+        key.classList.remove('is-lit', 'is-correct', 'is-wrong');
+        void key.offsetWidth;
+        key.classList.add(stateClass);
+        currentNoteBadge.textContent = `音符：${noteNames[note]}`;
+        flashTimers[note] = setTimeout(() => {
+          key.classList.remove('is-lit', 'is-correct', 'is-wrong');
+          flashTimers[note] = null;
+        }, duration);
+      }
+
+      function renderRoundDots() {
+        roundDotsContainer.innerHTML = '';
+        if (isEndless) {
+          const span = document.createElement('span');
+          span.className = 'text-xs font-semibold text-emerald-200/80';
+          span.textContent = round ? `無盡挑戰第 ${round} 關（目前記憶長度：${round} 個音符）` : '無盡模式：每過一關旋律長度 +1';
+          roundDotsContainer.appendChild(span);
+          return;
+        }
+        const total = totalRounds();
+        for (let i = 1; i <= total; i++) {
+          const dot = document.createElement('span');
+          const passed = i < round || (!active && round === total && position === total);
+          const current = active && i === round;
+          dot.className = `h-2.5 rounded-full transition-all duration-300 ${
+            passed ? 'w-5 bg-amber-300 shadow-[0_0_8px_#f1c878]' :
+            current ? 'w-6 bg-emerald-300 animate-pulse' : 'w-2.5 bg-white/20'
+          }`;
+          roundDotsContainer.appendChild(dot);
+        }
+      }
+
+      function updateStatsUI(popCombo = false) {
+        livesDisplay.textContent = '❤️'.repeat(Math.max(0, lives)) + '🖤'.repeat(Math.max(0, 3 - lives));
+        scoreValueEl.textContent = String(score);
+        comboBadgeEl.textContent = `${combo} Combo`;
+        if (popCombo && combo > 0) {
+          comboBadgeEl.classList.remove('combo-pop');
+          void comboBadgeEl.offsetWidth;
+          comboBadgeEl.classList.add('combo-pop');
+        }
+        const boardTop = loadLeaderboard(isEndless)[0]?.score || 0;
+        highScoreEl.textContent = String(Math.max(boardTop, score));
+      }
+
+      function resetPreviewLabels() {
+        activePreviewKey = null;
+        document.querySelectorAll('.preview-song-btn').forEach(btn => {
+          const idx = Number(btn.dataset.previewSong);
+          const isStartBtn = btn.closest('#start-screen') !== null;
+          const shortTitle = songs[idx]?.title.split('｜')[0] || '';
+          btn.textContent = isStartBtn ? '▶ 試聽' : `▶ ${shortTitle}`;
+          btn.classList.remove('bg-amber-300', 'text-slate-900');
+        });
+        const catLabel = CATEGORIES[activeCategory]?.label || '全部曲目';
+        if (previewAllStart) {
+          previewAllStart.textContent = activeCategory === 'all' ? '▶ 連播全部曲目' : `▶ 連播「${catLabel}」`;
+        }
+        const allMain = $('preview-all-main');
+        if (allMain) {
+          allMain.textContent = activeCategory === 'all' ? '▶ 連播全部' : '▶ 連播本類';
+        }
+      }
+
+      function update() {
+        const totalLabel = isEndless ? '∞' : totalRounds();
+        roundDisplay.textContent = round ? `${round} / ${totalLabel}` : `— / ${totalLabel}`;
+        progressDisplay.textContent = `本輪進度 ${position} / ${round}`;
+        replayBtn.disabled = !active || playing;
+        stopBtn.disabled = !playing;
+        pauseResumeBtn.disabled = !playing;
+        pauseResumeBtn.textContent = paused ? '▶ 繼續' : '⏸ 暫停';
+        keys.forEach(key => { key.disabled = !active || playing; });
+        renderRoundDots();
+        updateStatsUI();
+      }
+
+      function cancelPlayback() {
+        token++;
+        playing = false;
+        paused = false;
+        silence();
+        resetPreviewLabels();
+        progressBar.style.width = '0%';
+        currentNoteBadge.textContent = '音符：—';
+        if (!isEndless) renderMelodyVisualizer(melody, -1);
+        flashTimers.forEach((timer, idx) => {
+          if (timer) clearTimeout(timer);
+          flashTimers[idx] = null;
+        });
+        keys.forEach(key => key.classList.remove('is-lit', 'is-correct', 'is-wrong'));
+        update();
+      }
+
+      // 10. 內建旋律播放引擎
+      async function playPresetSongs(songIndices, triggerKey) {
+        if (!songIndices || songIndices.length === 0) return;
+        if (activePreviewKey === triggerKey && playing) {
+          cancelPlayback();
+          startPreviewStatus.textContent = '已停止播放。';
+          statusEl.textContent = '已停止播放。';
+          return;
+        }
+        stopOriginalPlayer();
+        cancelPlayback();
+        resultOverlay.classList.add('hidden');
+        resultOverlay.classList.remove('flex');
+        const thisRun = ++token;
+        playing = true;
+        paused = false;
+        active = false;
+        round = 0;
+        position = 0;
+        activePreviewKey = triggerKey;
+        update();
+
+        document.querySelectorAll('.preview-song-btn').forEach(btn => {
+          if (triggerKey !== 'all' && Number(btn.dataset.previewSong) === Number(triggerKey)) {
+            btn.textContent = '⏹ 停止';
+            btn.classList.add('bg-amber-300', 'text-slate-900');
+          }
+        });
+        if (triggerKey === 'all') {
+          if (previewAllStart) previewAllStart.textContent = '⏹ 停止連播';
+          const allMain = $('preview-all-main');
+          if (allMain) allMain.textContent = '⏹ 停止連播';
+        }
+
+        do {
+          for (let s = 0; s < songIndices.length; s++) {
+            if (thisRun !== token) return;
+            const idx = songIndices[s];
+            setupModeUI(false, idx);
+            const song = songs[idx];
+            const prefix = songIndices.length > 1 ? `（第 ${s + 1} / ${songIndices.length} 首）` : '';
+            const msg = `正在播放${prefix}：${song.title}`;
+            startPreviewStatus.textContent = msg;
+            statusEl.textContent = msg;
+            lyricSection.textContent = `樂段進度：完整旋律播放中（共 ${song.melody.length} 個音符）`;
+            progressBar.style.width = '0%';
+            renderMelodyVisualizer(song.melody, -1);
+            update();
+
+            await sleep(280);
+            for (let i = 0; i < song.melody.length; i++) {
+              while (paused && thisRun === token) {
+                await sleep(80);
+              }
+              if (thisRun !== token) return;
+
+              const speed = getSpeed();
+              const noteIdx = song.melody[i];
+              const beatFactor = song.beats?.[i] ?? 1;
+              const noteMs = (beatFactor * song.beatMs) / speed;
+              const phrasePause = ((i === 1 || i === 4) ? 135 : 70) / speed;
+
+              renderMelodyVisualizer(song.melody, i);
+              progressBar.style.width = `${Math.round(((i + 1) / song.melody.length) * 100)}%`;
+              flash(noteIdx, Math.min(noteMs * 0.82, 560), 'is-lit');
+              sound(noteIdx, Math.min((noteMs / 1000) * 0.82, 1.15));
+              await sleep(noteMs + phrasePause);
+            }
+            if (s < songIndices.length - 1) await sleep(600);
+          }
+        } while (loopPlayback && thisRun === token);
+
+        if (thisRun !== token) return;
+        playing = false;
+        paused = false;
+        resetPreviewLabels();
+        renderMelodyVisualizer(melody, -1);
+        currentNoteBadge.textContent = '音符：完成';
+        startPreviewStatus.textContent = '播放完成！可選擇歌曲並按「進入曲目闖關」。';
+        statusEl.textContent = '旋律播放完畢！按「開始遊戲」挑戰記憶。';
+        lyricSection.textContent = '樂段進度：尚未開始';
+        update();
+      }
+
+      previewAllStart.addEventListener('click', () => {
+        const indices = getFilteredSongEntries().map(item => item.index);
+        playPresetSongs(indices, 'all');
+      });
+
+      pauseResumeBtn.addEventListener('click', () => {
+        if (!playing) return;
+        paused = !paused;
+        if (paused) silence();
+        statusEl.textContent = paused ? '⏸ 音樂已暫停，按「繼續」恢復播放。' : '▶ 繼續播放音樂…';
+        update();
+      });
+
+      loopToggleBtn.addEventListener('click', () => {
+        loopPlayback = !loopPlayback;
+        loopToggleBtn.setAttribute('aria-pressed', String(loopPlayback));
+        loopToggleBtn.textContent = loopPlayback ? '🔁 循環：開' : '🔁 循環：關';
+        loopToggleBtn.classList.toggle('bg-amber-300/25', loopPlayback);
+        loopToggleBtn.classList.toggle('border-amber-300/60', loopPlayback);
+      });
+
+      // 11. 記憶闖關與雙模式前三名排行榜結算
+      function lyricPart(index) {
+        if (isEndless) return `隨機旋律第 ${index + 1} 音`;
+        const total = melody.length;
+        if (index < Math.ceil(total * 0.3)) return '前奏／起承樂句';
+        if (index < Math.ceil(total * 0.7)) return '主旋律發展段';
+        return '高潮副歌樂句';
+      }
+
+      function showResultModal(isWin) {
+        active = false;
+        playing = false;
+        paused = false;
+        update();
+
+        const modeName = isEndless ? '無盡挑戰榜' : '曲目闖關榜';
+        const rank = getQualifyingRank(score, isEndless);
+        resultEmoji.textContent = rank ? '🏆' : (isWin ? '🎉' : '💔');
+        resultTitle.textContent = isWin ? '全曲挑戰成功！' : '生命值歸零，挑戰結束！';
+        resultSubtitle.textContent = isWin
+          ? `太強了！你完美重現了《${selectedSong.title.split('｜')[0]}》的全部旋律！`
+          : (isEndless ? `你在無盡模式中堅持到了第 ${round} 關！` : `差一點就過關了（抵達第 ${round} / ${totalRounds()} 回合），再試一次吧！`);
+
+        resultScore.textContent = String(score);
+        resultCombo.textContent = `${maxCombo}x`;
+        resultBestLabel.textContent = isEndless ? '無盡榜首' : '曲目榜首';
+        resultBest.textContent = String(Math.max(loadLeaderboard(isEndless)[0]?.score || 0, score));
+        resultSwitchBtn.textContent = isEndless ? '🎵 切回曲目模式' : '🎲 挑戰無盡模式';
+
+        if (rank !== null) {
+          rankAchievedLabel.textContent = `🎉 恭喜榮登【${modeName}】第 ${rank} 名！請寫上你的姓名：`;
+          playerNameInput.value = '';
+          playerNameInput.disabled = false;
+          saveScoreBtn.disabled = false;
+          saveScoreBtn.classList.remove('opacity-50');
+          saveScoreFeedback.classList.add('hidden');
+          leaderboardEntryBox.classList.remove('hidden');
+          setTimeout(() => playerNameInput.focus(), 120);
+        } else {
+          leaderboardEntryBox.classList.add('hidden');
+        }
+
+        resultOverlay.classList.remove('hidden');
+        resultOverlay.classList.add('flex');
+      }
+
+      async function demonstrate(sequenceLength = round, fullPreview = false) {
+        stopOriginalPlayer();
+        const thisRun = ++token;
+        playing = true;
+        paused = false;
+        statusEl.textContent = fullPreview ? '先完整聆聽一次旋律…' : `第 ${round} 回合：仔細聽，記住亮起的順序…`;
+        progressBar.style.width = '0%';
+        update();
+        await sleep(380);
+
+        const baseBeatMs = isEndless ? 360 : selectedSong.beatMs;
+        for (let i = 0; i < sequenceLength; i++) {
+          while (paused && thisRun === token) {
+            await sleep(80);
+          }
+          if (thisRun !== token) return;
+          const speed = getSpeed();
+          lyricSection.textContent = `樂段進度：${lyricPart(i)}`;
+          const beatFactor = isEndless ? 1 : (selectedSong.beats?.[i] ?? 1);
+          const noteMs = (beatFactor * baseBeatMs) / speed;
+          const phrasePause = ((i === 1 || i === 4) ? 130 : 70) / speed;
+
+          if (!isEndless) renderMelodyVisualizer(melody, i);
+          progressBar.style.width = `${Math.round(((i + 1) / sequenceLength) * 100)}%`;
+          flash(melody[i], Math.min(noteMs * 0.8, 540), 'is-lit');
+          sound(melody[i], Math.min((noteMs / 1000) * 0.78, 1.05));
+          await sleep(noteMs + phrasePause);
+        }
+
+        if (thisRun !== token) return;
+        if (!isEndless) renderMelodyVisualizer(melody, -1);
+        if (fullPreview) {
+          round = 1;
+          position = 0;
+          playing = false;
+          update();
+          demonstrate(1);
+          return;
+        }
+        playing = false;
+        progressBar.style.width = '0%';
+        currentNoteBadge.textContent = '音符：請作答';
+        statusEl.textContent = `輪到你！依序按下 ${round} 個音符。`;
+        update();
+      }
+
+      async function handleNotePress(note) {
+        if (playing) return;
+        if (!active) {
+          flash(note, 260, 'is-lit');
+          sound(note, .3);
+          return;
+        }
+
+        const expectedNote = melody[position];
+        if (note !== expectedNote) {
+          flash(note, 420, 'is-wrong');
+          playGameSFX('error');
+          lives--;
+          combo = 0;
+          active = false;
+          update();
+
+          if (lives <= 0) {
+            statusEl.textContent = `按錯了（應為 ${noteNames[expectedNote]}），生命值已耗盡！`;
+            await sleep(750);
+            showResultModal(false);
+            return;
+          }
+
+          statusEl.textContent = `按錯了！正確音符是 ${noteNames[expectedNote]}（剩餘 ${lives} 顆愛心），重播本回合…`;
+          position = 0;
+          await sleep(950);
+          active = true;
+          demonstrate(round);
+          return;
+        }
+
+        flash(note, 260, 'is-correct');
+        sound(note, .3);
+        combo++;
+        if (combo > maxCombo) maxCombo = combo;
+        const speedBonus = getSpeed() > 1 ? 1.2 : 1;
+        const gained = Math.round((100 + combo * 15) * speedBonus);
+        score += gained;
+        position++;
+        updateStatsUI(true);
+        update();
+
+        if (position === round) {
+          if (!isEndless && round >= totalRounds()) {
+            playGameSFX('victory');
+            statusEl.textContent = '🎉 恭喜完成全部回合！';
+            lyricSection.textContent = '樂段進度：全曲挑戰成功';
+            await sleep(550);
+            showResultModal(true);
+          } else {
+            playGameSFX('clear');
+            round++;
+            if (isEndless) melody.push(randomNote());
+            position = 0;
+            statusEl.textContent = `過關！+${gained} 分，準備進入第 ${round} 回合…`;
+            update();
+            await sleep(680);
+            demonstrate(round);
+          }
+        }
+      }
+
+      function startNewGame() {
+        stopOriginalPlayer();
+        cancelPlayback();
+        resultOverlay.classList.add('hidden');
+        resultOverlay.classList.remove('flex');
+        scoreSaved = false;
+        lives = 3;
+        score = 0;
+        combo = 0;
+        maxCombo = 0;
+        round = 1;
+        position = 0;
+        active = true;
+        melody = isEndless ? [randomNote()] : selectedSong.melody;
+        update();
+        demonstrate(1);
+      }
+
+      keys.forEach(key => {
+        key.addEventListener('click', () => handleNotePress(Number(key.dataset.note)));
+      });
+
+      // 鍵盤快捷鍵（1-8 彈奏、Space 暫停/繼續、R 重聽、Esc 關閉彈窗）
+      document.addEventListener('keydown', event => {
+        if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+        if (event.key === 'Escape') {
+          if (!resultOverlay.classList.contains('hidden')) {
+            resultOverlay.classList.add('hidden');
+            resultOverlay.classList.remove('flex');
+          } else if (!originalPlayerDrawer.classList.contains('hidden')) {
+            stopOriginalPlayer();
+            originalPlayerDrawer.classList.add('hidden');
+          }
+          return;
+        }
+        if (gameMain.classList.contains('hidden')) return;
+
+        if (event.code === 'Space' && playing) {
+          event.preventDefault();
+          pauseResumeBtn.click();
+          return;
+        }
+        if ((event.key === 'r' || event.key === 'R') && active && !playing) {
+          event.preventDefault();
+          replayBtn.click();
+          return;
+        }
+        const num = Number(event.key);
+        if (num >= 1 && num <= 8) {
+          handleNotePress(num - 1);
+        }
+      });
+
+      startBtn.addEventListener('click', startNewGame);
+      $('result-retry-btn').addEventListener('click', startNewGame);
+      resultSwitchBtn.addEventListener('click', () => {
+        setupModeUI(!isEndless, selectedSongIndex);
+        startNewGame();
+      });
+
+      replayBtn.addEventListener('click', () => {
+        if (!active || playing) return;
+        position = 0;
+        update();
+        demonstrate(round);
+      });
+
+      stopBtn.addEventListener('click', () => {
+        cancelPlayback();
+        active = false;
+        statusEl.textContent = '已停止播放。按「開始遊戲」重新開始。';
+      });
+
+      muteBtn.addEventListener('click', () => {
+        muted = !muted;
+        if (muted) silence();
+        muteBtn.setAttribute('aria-pressed', String(muted));
+        $('mute-on').classList.toggle('hidden', muted);
+        $('mute-off').classList.toggle('hidden', !muted);
+      });
+
+      // 12. 創造者面板可視化互動控制
+      function parseCreatorNotes() {
+        return creatorNotes.value
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => s !== '')
+          .map(Number)
+          .filter(n => Number.isInteger(n) && n >= 0 && n <= 7);
+      }
+
+      function syncCreatorVisuals() {
+        const notes = parseCreatorNotes();
+        creatorNoteCount.textContent = `目前 ${notes.length} 個音符`;
+        creatorVisualChips.innerHTML = '';
+        if (notes.length === 0) {
+          creatorVisualChips.innerHTML = '<span class="text-xs text-amber-100/45">尚未輸入音符，請點擊上方琴鍵開始譜曲…</span>';
+        } else {
+          notes.forEach((n, idx) => {
+            const chip = document.createElement('span');
+            chip.className = 'inline-flex items-center gap-1 rounded-lg border border-amber-300/35 bg-amber-300/15 px-2 py-0.5 text-xs font-bold text-amber-100';
+            chip.innerHTML = `<span class="text-[10px] opacity-60">${idx + 1}.</span>${shortSolfege[n]}`;
+            creatorVisualChips.appendChild(chip);
+          });
+        }
+
+        const ms = Number(creatorTempo.value) || 320;
+        const bpm = Math.round(60000 / ms);
+        const speedDesc = bpm >= 160 ? '輕快' : bpm >= 105 ? '適中' : '抒情';
+        creatorBpmLabel.textContent = `約 ${bpm} BPM · ${speedDesc}`;
+      }
+
+      document.querySelectorAll('[data-compose-note]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const noteVal = Number(btn.dataset.composeNote);
+          sound(noteVal, 0.28);
+          const current = parseCreatorNotes();
+          current.push(noteVal);
+          creatorNotes.value = current.join(', ');
+          syncCreatorVisuals();
+        });
+      });
+
+      $('creator-backspace').addEventListener('click', () => {
+        const current = parseCreatorNotes();
+        current.pop();
+        creatorNotes.value = current.join(', ');
+        syncCreatorVisuals();
+      });
+
+      $('creator-clear').addEventListener('click', () => {
+        creatorNotes.value = '';
+        syncCreatorVisuals();
+      });
+
+      $('creator-random').addEventListener('click', () => {
+        const rand = Array.from({ length: 8 }, () => randomNote());
+        creatorNotes.value = rand.join(', ');
+        syncCreatorVisuals();
+        creatorStatus.textContent = '🎲 已隨機生成 8 個音符！';
+      });
+
+      $('creator-preview-btn').addEventListener('click', async () => {
+        const notes = parseCreatorNotes();
+        const ms = Number(creatorTempo.value) || 320;
+        if (notes.length === 0) {
+          creatorStatus.textContent = '請先點擊琴鍵輸入至少 1 個音符。';
+          return;
+        }
+        cancelPlayback();
+        const thisRun = ++token;
+        playing = true;
+        creatorStatus.textContent = '🎵 正在試聽你的創作旋律…';
+        for (let i = 0; i < notes.length; i++) {
+          if (thisRun !== token) return;
+          flash(notes[i], Math.min(ms * 0.8, 450), 'is-lit');
+          sound(notes[i], Math.min((ms / 1000) * 0.8, 0.9));
+          await sleep(ms + 70);
+        }
+        if (thisRun !== token) return;
+        playing = false;
+        creatorStatus.textContent = '試聽完畢！滿意的話可按「套用並開始挑戰」或「另存為新曲目」。';
+      });
+
+      creatorTempoSlider.addEventListener('input', () => {
+        creatorTempo.value = creatorTempoSlider.value;
+        syncCreatorVisuals();
+      });
+
+      creatorTempo.addEventListener('input', () => {
+        const val = Math.min(1000, Math.max(160, Number(creatorTempo.value) || 320));
+        creatorTempoSlider.value = String(val);
+        syncCreatorVisuals();
+      });
+
+      creatorNotes.addEventListener('input', syncCreatorVisuals);
+
+      const creatorDefaults = () => {
+        const base = songs[selectedSongIndex] || originalSongs[0];
+        creatorTitle.value = base.title;
+        creatorCategory.value = base.category || 'custom';
+        creatorYoutubeUrl.value = base.url || '';
+        creatorTempo.value = base.beatMs;
+        creatorTempoSlider.value = String(Math.min(1000, Math.max(160, base.beatMs)));
+        creatorNotes.value = base.melody.join(', ');
+        creatorLyrics.value = base.lyrics;
+        syncCreatorVisuals();
+      };
+
+      creatorToggle.addEventListener('click', () => {
+        creatorPanel.classList.toggle('hidden');
+        if (!creatorPanel.classList.contains('hidden')) creatorDefaults();
+      });
+
+      function buildSongFromCreator() {
+        const notes = parseCreatorNotes();
+        const tempo = Number(creatorTempo.value);
+        if (!creatorTitle.value.trim() || !Number.isFinite(tempo) || tempo < 160 || tempo > 1200 || notes.length < 1) {
+          creatorStatus.textContent = '請輸入歌曲名稱、160–1200 的節奏，並至少加入 1 個音符。';
+          return null;
+        }
+        const chosenCat = CATEGORIES[creatorCategory.value] ? creatorCategory.value : 'custom';
+        const customUrl = creatorYoutubeUrl.value.trim() || 'https://music.youtube.com/';
+        return {
+          category: chosenCat,
+          title: creatorTitle.value.trim(),
+          disclaimer: `${CATEGORIES[chosenCat].label}；自訂編曲作品，支援程式內旋律挑戰與原曲播放。`,
+          lyrics: creatorLyrics.value || '（自訂樂譜無歌詞）',
+          url: customUrl,
+          melody: notes,
+          beats: notes.map(() => 1),
+          beatMs: tempo
+        };
+      }
+
+      $('creator-apply').addEventListener('click', () => {
+        const newSong = buildSongFromCreator();
+        if (!newSong) return;
+        songs[selectedSongIndex] = newSong;
+        persistCustomSongs();
+        renderCategoryTabs();
+        renderSongSelectors();
+        setupModeUI(false, selectedSongIndex);
+        scoreSaved = false;
+        lives = 3;
+        score = 0;
+        combo = 0;
+        maxCombo = 0;
+        round = 1;
+        position = 0;
+        active = true;
+        cancelPlayback();
+        update();
+        demonstrate(melody.length, true);
+        creatorStatus.textContent = '✅ 已套用至目前曲目，正在播放示範旋律！';
+      });
+
+      $('creator-save-new').addEventListener('click', () => {
+        const newSong = buildSongFromCreator();
+        if (!newSong) return;
+        songs.push(newSong);
+        persistCustomSongs();
+        selectedSongIndex = songs.length - 1;
+        if (activeCategory !== 'all' && activeCategory !== newSong.category) {
+          activeCategory = newSong.category;
+        }
+        renderCategoryTabs();
+        renderSongSelectors();
+        setupModeUI(false, selectedSongIndex);
+        creatorStatus.textContent = `🎉 已將《${newSong.title}》新增至「${CATEGORIES[newSong.category].label}」分類並永久儲存！`;
+      });
+
+      $('creator-reset').addEventListener('click', () => {
+        songs = originalSongs.map(s => ({ ...s, melody: [...s.melody], beats: [...s.beats] }));
+        try { localStorage.removeItem(CUSTOM_SONGS_KEY); } catch (_) {}
+        activeCategory = 'all';
+        selectedSongIndex = 0;
+        renderCategoryTabs();
+        renderSongSelectors();
+        setupModeUI(false, 0);
+        creatorDefaults();
+        creatorStatus.textContent = '已還原為初始五首預設歌曲（含貝多芬《歡樂頌》與 MC 張天賦《男人怎可以》）。';
+      });
+
+      // 13. 畫面切換與模式切換
+      launchButton.addEventListener('click', () => {
+        cancelPlayback();
+        setupModeUI(false, selectedSongIndex);
+        startScreen.classList.add('hidden');
+        gameMain.classList.remove('hidden');
+        round = 0;
+        position = 0;
+        active = false;
+        update();
+      });
+
+      launchEndlessButton.addEventListener('click', () => {
+        cancelPlayback();
+        setupModeUI(true);
+        startScreen.classList.add('hidden');
+        gameMain.classList.remove('hidden');
+        startNewGame();
+      });
+
+      toggleEndlessBtn.addEventListener('click', () => {
+        cancelPlayback();
+        setupModeUI(!isEndless, selectedSongIndex);
+        round = 0;
+        position = 0;
+        active = false;
+        statusEl.textContent = isEndless ? '已切換至無盡模式！按「開始遊戲」挑戰無盡榜。' : '已切回曲目模式！按「開始遊戲」挑戰曲目榜。';
+        update();
+      });
+
+      backToMenu.addEventListener('click', () => {
+        stopOriginalPlayer();
+        cancelPlayback();
+        active = false;
+        renderCategoryTabs();
+        renderSongSelectors();
+        renderAllLeaderboards();
+        gameMain.classList.add('hidden');
+        startScreen.classList.remove('hidden');
+      });
+
+      // 初始化渲染
+      renderCategoryTabs();
+      renderSongSelectors();
+      renderAllLeaderboards();
+    })();
+  </script>
+</body>
+</html>
